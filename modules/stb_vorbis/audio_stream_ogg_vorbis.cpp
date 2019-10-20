@@ -119,6 +119,7 @@ void AudioStreamPlaybackOGGVorbis::seek(float p_time) {
 }
 
 AudioStreamPlaybackOGGVorbis::~AudioStreamPlaybackOGGVorbis() {
+	vorbis_stream->playbacks.erase(this);
 	if (ogg_alloc.alloc_buffer) {
 		stb_vorbis_close(ogg_stream);
 		AudioServer::get_singleton()->audio_data_free(ogg_alloc.alloc_buffer);
@@ -146,6 +147,8 @@ Ref<AudioStreamPlayback> AudioStreamOGGVorbis::instance_playback() {
 		ovs->ogg_alloc.alloc_buffer = NULL;
 		ERR_FAIL_COND_V(!ovs->ogg_stream, Ref<AudioStreamPlaybackOGGVorbis>());
 	}
+
+	playbacks.insert(ovs.ptr());
 
 	return ovs;
 }
@@ -252,6 +255,34 @@ float AudioStreamOGGVorbis::get_loop_offset() const {
 float AudioStreamOGGVorbis::get_length() const {
 
 	return length;
+}
+
+void AudioStreamOGGVorbis::reload_from_file() {
+
+	Resource::reload_from_file();
+	AudioServer::get_singleton()->lock();
+	for (Set<AudioStreamPlaybackOGGVorbis *>::Element *E = playbacks.front(); E; E = E->next()) {
+
+		AudioStreamPlaybackOGGVorbis *current_playback = E->get();
+		current_playback->stop();
+		current_playback->vorbis_stream = Ref<AudioStreamOGGVorbis>(this);
+		current_playback->ogg_alloc.alloc_buffer = (char *)AudioServer::get_singleton()->audio_data_alloc(decode_mem_size);
+		current_playback->ogg_alloc.alloc_buffer_length_in_bytes = decode_mem_size;
+		current_playback->frames_mixed = 0;
+		current_playback->active = false;
+		current_playback->loops = 0;
+		int error;
+		current_playback->ogg_stream = stb_vorbis_open_memory((const unsigned char *)data, data_len, &error, &current_playback->ogg_alloc);
+		if (!current_playback->ogg_stream) {
+
+			AudioServer::get_singleton()->audio_data_free(current_playback->ogg_alloc.alloc_buffer);
+			current_playback->ogg_alloc.alloc_buffer = NULL;
+			print_line("Hit error on AudioStreamOGGVorbis::reload_from_file()");
+		}
+	}
+	AudioServer::get_singleton()->unlock();
+	//emit_changed wont work here since the changed signal is not mapped for this type of object (i think)
+	_change_notify();
 }
 
 void AudioStreamOGGVorbis::_bind_methods() {

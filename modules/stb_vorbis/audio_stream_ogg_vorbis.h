@@ -78,6 +78,8 @@ class AudioStreamOGGVorbis : public AudioStream {
 
 	friend class AudioStreamPlaybackOGGVorbis;
 
+	Set<AudioStreamPlaybackOGGVorbis *> playbacks;
+
 	void *data;
 	uint32_t data_len;
 
@@ -106,6 +108,8 @@ public:
 	PoolVector<uint8_t> get_data() const;
 
 	virtual float get_length() const; //if supported, otherwise return 0
+
+	virtual void reload_from_file() override;
 
 	AudioStreamOGGVorbis();
 	virtual ~AudioStreamOGGVorbis();
